@@ -1,0 +1,125 @@
+#' List available metrics in *land4health*
+#'
+#' @description
+#' Returns a tibble with the metadata of every metric shipped with
+#' **land4health**.  You can optionally filter by thematic *category*, metric
+#' short name, or *provider*.
+#' If `open_in_browser = TRUE`, all matching URLs are opened in your default
+#' browser; for safety you **must** supply at least one filter, and—if more than
+#' five tabs would open—you are asked to confirm in interactive sessions.
+#'
+#' @param category  Optional single string. Filter by thematic category.
+#' @param metric    Optional single string. Filter by metric short name.
+#' @param provider  Optional single string. Filter by the `dataset` column.
+#' @param open_in_browser Logical; open the matching URLs in your browser?
+#'        Defaults to `FALSE`.
+#'
+#' @return A tibble (returned *invisibly*).  When `open_in_browser = FALSE`
+#'         a compact preview (max 10 rows) is printed before the tibble is
+#'         returned.
+#'
+#' @section Credits:
+#' \if{html}{\href{https://www.innovalab.info/}{\figure{innovalab.png}{options: width="120"}}}
+#' \if{latex}{\href{https://www.innovalab.info/}{\figure{innovalab.pdf}{options: width=2cm}}}
+#'
+#' Pioneering geospatial health analytics and open-science tools.
+#' Developed by the Innovalab Team. For more information, send an email to
+#' \email{imt.innovlab@oficinas-upch.pe}.
+#'
+#' Follow us on:
+#' \itemize{
+#'   \item \if{html}{\figure{linkedin-innova.png}{options: width="16"}} \if{latex}{\figure{linkedin-innova.pdf}{options: width=0.4cm}} \href{https://www.linkedin.com/company/innovalab-imt}{Innovalab Linkedin}
+#'   \item \if{html}{\figure{twitter-innova.png}{options: width="16"}} \if{latex}{\figure{twitter-innova.pdf}{options: width=0.4cm}} \href{https://x.com/innovalab_imt}{Innovalab X}
+#'   \item \if{html}{\figure{facebook-innova.png}{options: width="16"}} \if{latex}{\figure{facebook-innova.pdf}{options: width=0.4cm}} \href{https://www.facebook.com/imt.innovalab}{Innovalab facebook}
+#'   \item \if{html}{\figure{instagram-innova.png}{options: width="16"}} \if{latex}{\figure{instagram-innova.pdf}{options: width=0.4cm}} \href{https://www.instagram.com/innovalab_imt/}{Innovalab instagram}
+#'   \item \if{html}{\figure{tiktok-innova.png}{options: width="16"}} \if{latex}{\figure{tiktok-innova.pdf}{options: width=0.4cm}} \href{https://www.tiktok.com/@innovalab_imt}{Innovalab tiktok}
+#'   \item \if{html}{\figure{spotify-innova.png}{options: width="16"}} \if{latex}{\figure{spotify-innova.pdf}{options: width=0.4cm}} \href{https://www.innovalab.info/podcast}{Innovalab Podcast}
+#' }
+#'
+#' @examples
+#' ## All examples keep `open_in_browser = FALSE` to avoid side-effects
+#' ## during automated checks.
+#'
+#' ## 1  Show the full inventory (truncated to 10 rows).
+#' l4h_list_metrics()
+#'
+#' ## 2  Filter by category (“Human intervention”).
+#' l4h_list_metrics(category = "Human intervention")
+#'
+#' ## 3  Filter by provider (“WorldPop”) and store the result.
+#' worldpop_tbl <- l4h_list_metrics(provider = "WorldPop")
+#' head(worldpop_tbl)
+#'
+#' @export
+l4h_list_metrics <- function(category = NULL,
+                             metric   = NULL,
+                             provider = NULL,
+                             open_in_browser = FALSE) {
+
+  check_scalar_chr <- function(x, arg) {
+    if (!is.null(x) && (!is.character(x) || length(x) != 1))
+      stop(sprintf("`%s` must be a single string or NULL.", arg), call. = FALSE)
+  }
+  check_scalar_chr(category, "category")
+  check_scalar_chr(metric,   "metric")
+  check_scalar_chr(provider, "provider")
+
+  df <- get_data()
+
+  if (!is.null(category)) {
+    df <- df[df$category == category, , drop = FALSE]
+  }
+
+  if (!is.null(metric)) {
+    df <- df[df$metric == metric, , drop = FALSE]
+  }
+
+  if (!is.null(provider)) {
+    df <- df[df$dataset == provider, , drop = FALSE]
+  }
+
+  if (nrow(df) == 0L) {
+    cli::cli_abort("No metrics matched {.val {metric}}. Please check your query.")
+  }
+
+
+  # Browser logic
+  if (open_in_browser) {
+
+    # Require at least one filter to avoid a tab storm
+    if (is.null(category) && is.null(metric) && is.null(provider)) {
+      cli::cli_abort(c(
+        "x" = "{.code open_in_browser = TRUE} cannot be used without a filter.\n",
+        "i" = "Add at least one of {.arg category}, {.arg metric}, {.arg provider}."
+      ))
+
+    }
+
+    n <- nrow(df)
+
+    # Ask for confirmation if > 5 tabs would open
+    if (interactive() && n > 5L) {
+      cli::cli_inform("{.strong {n}} links will be opened in your default browser.")
+      ans <- readline("Continue? [y/N]: ")
+      ans <- tolower(trimws(ans))
+
+      if (!startsWith(ans, "y")) {
+        cli::cli_alert_info("Operation cancelled by user.")
+        return(invisible(df))
+      }
+    }
+
+    invisible(lapply(df$url, utils::browseURL))
+
+  } else {
+    if (nrow(df) > 10L) {
+      print(utils::head(df, 10L), row.names = FALSE)
+      cat("... (", nrow(df) - 10L, " more)\n", sep = "")
+    } else {
+      print(df, row.names = FALSE)
+    }
+  }
+  invisible(df)
+}
+
+

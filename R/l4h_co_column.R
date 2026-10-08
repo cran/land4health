@@ -1,0 +1,201 @@
+#' Extracts carbon monoxide (CO) concentration from Sentinel-5P TROPOMI
+#'
+#' @description
+#' Retrieves the CO column number density (mol/m2) for a user-defined region and date range
+#' from the Sentinel-5P TROPOMI OFFLINE L3 CO dataset.
+#'
+#' \if{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{
+#'   \figure{lifecycle-stable.png}{options: width="120"}
+#' }}
+#' \if{latex}{\href{https://lifecycle.r-lib.org/articles/stages.html#stable}{
+#'   \figure{lifecycle-stable.pdf}{options: width=2cm}
+#' }}
+#'
+#'
+#' @param from   Character. Start date in `"YYYY-MM-DD"` format (e.g., `"2020-01-01"`).
+#' @param to     Character. End date in `"YYYY-MM-DD"` format (e.g., `"2020-12-31"`).
+#' @param region A spatial object (`sf`, `sfc`, or `SpatVector`) defining the region of interest.
+#' @param stat   Character. Summary statistic to apply (`"mean"`, `"median"`, `"max"`, etc.).
+#' @param scale  Numeric. Nominal scale in meters. Default is `1113`.
+#' @param sf     Logical. Return result as `sf`? Default is `TRUE`.
+#' @param quiet  Logical. Suppress progress messages? Default is `FALSE`.
+#' @param force  Logical. Force extract without spatial check? Default is `FALSE`.
+#' @param ...    Arguments passed to the extraction backend.
+#'
+#' @return An `sf` or `tibble` containing CO column density (mol/m2) by date and geometry.
+#'
+#' @details
+#' The function uses the Earth Engine dataset `COPERNICUS/S5P/OFFL/L3_CO` and selects only the
+#' `"CO_column_number_density"` band. Images are composited to daily means before
+#' extraction to avoid exceeding the 5000-band limit on `toBands()`.
+#'
+#' @section Credits:
+#' \if{html}{\href{https://www.innovalab.info/}{\figure{innovalab.png}{options: width="120"}}}
+#' \if{latex}{\href{https://www.innovalab.info/}{\figure{innovalab.pdf}{options: width=2cm}}}
+#'
+#' Pioneering geospatial health analytics and open-science tools.
+#' Developed by the Innovalab Team. For more information, send an email to
+#' \email{imt.innovlab@oficinas-upch.pe}.
+#'
+#' Follow us on:
+#' \itemize{
+#'   \item \if{html}{\figure{linkedin-innova.png}{options: width="16"}} \if{latex}{\figure{linkedin-innova.pdf}{options: width=0.4cm}} \href{https://www.linkedin.com/company/innovalab-imt}{Innovalab Linkedin}
+#'   \item \if{html}{\figure{twitter-innova.png}{options: width="16"}} \if{latex}{\figure{twitter-innova.pdf}{options: width=0.4cm}} \href{https://x.com/innovalab_imt}{Innovalab X}
+#'   \item \if{html}{\figure{facebook-innova.png}{options: width="16"}} \if{latex}{\figure{facebook-innova.pdf}{options: width=0.4cm}} \href{https://www.facebook.com/imt.innovalab}{Innovalab facebook}
+#'   \item \if{html}{\figure{instagram-innova.png}{options: width="16"}} \if{latex}{\figure{instagram-innova.pdf}{options: width=0.4cm}} \href{https://www.instagram.com/innovalab_imt/}{Innovalab instagram}
+#'   \item \if{html}{\figure{tiktok-innova.png}{options: width="16"}} \if{latex}{\figure{tiktok-innova.pdf}{options: width=0.4cm}} \href{https://www.tiktok.com/@innovalab_imt}{Innovalab tiktok}
+#'   \item \if{html}{\figure{spotify-innova.png}{options: width="16"}} \if{latex}{\figure{spotify-innova.pdf}{options: width=0.4cm}} \href{https://www.innovalab.info/podcast}{Innovalab Podcast}
+#' }
+#'
+#' @examples
+#' \donttest{
+#' if (interactive()) {
+#' library(land4health)
+#' ee_Initialize()
+#'
+#' # Define region as a bounding box polygon
+#' region <- st_as_sf(st_sfc(
+#'   st_polygon(list(matrix(c(
+#'     -74.1, -4.4,
+#'     -74.1, -3.7,
+#'     -73.2, -3.7,
+#'     -73.2, -4.4,
+#'     -74.1, -4.4
+#'   ), ncol = 2, byrow = TRUE))),
+#'   crs = 4326)
+#' )
+#'
+#' # Run CO column calculation
+#' co_data <- l4h_co_column(
+#'   from = "2022-01-01",
+#'   to = "2022-12-31",
+#'   region = region,
+#'   stat = "mean"
+#' )
+#' head(co_data)
+#' }
+#' }
+#'
+#' @references
+#' COPERNICUS/S5P/OFFL/L3_CO. Sentinel-5P Offline L3 Carbon Monoxide. European Union / ESA / Copernicus.
+#' \url{https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S5P_OFFL_L3_CO}
+#'
+#' @export
+l4h_co_column <- function(from, to, region, stat = "mean",
+                          scale = 1113, sf = TRUE, quiet = FALSE,
+                          force = FALSE, ...) {
+
+  # Dataset date range
+  start_year <- as.numeric(.internal_data$co_column$startyear)
+  end_year   <- as.numeric(.internal_data$co_column$endyear)
+
+  # Validate date format
+  valid_date_format <- function(x) grepl("^\\d{4}-\\d{2}-\\d{2}$", x)
+
+  if (!valid_date_format(from)) {
+    cli::cli_abort("Parameter {.field from} must be in 'YYYY-MM-DD' format. Got: {.val {from}}")
+  }
+  if (!valid_date_format(to)) {
+    cli::cli_abort("Parameter {.field to} must be in 'YYYY-MM-DD' format. Got: {.val {to}}")
+  }
+
+  from_date <- as.Date(from)
+  to_date   <- as.Date(to)
+
+  if (is.na(from_date)) {
+    cli::cli_abort("Parameter {.field from} could not be parsed as a valid date. Got: {.val {from}}")
+  }
+  if (is.na(to_date)) {
+    cli::cli_abort("Parameter {.field to} could not be parsed as a valid date. Got: {.val {to}}")
+  }
+
+  from_year <- as.numeric(format(from_date, "%Y"))
+  to_year   <- as.numeric(format(to_date, "%Y"))
+
+  if (from_year < start_year || to_year > end_year) {
+    cli::cli_abort("Years must be in the range {start_year} to {end_year}. Got: {.val {from_year}} to {.val {to_year}}")
+  }
+
+  if (to_date < from_date) {
+    cli::cli_abort("Parameter {.field to} must be greater than or equal to {.field from}")
+  }
+
+  # Validate spatial object
+  sf_classes <- c("sf", "sfc", "SpatVector")
+  if (!inherits(region, sf_classes)) {
+    cli::cli_abort("Invalid {.arg region}: must be an {.cls sf}, {.cls sfc}, or {.cls SpatVector} object.")
+  }
+
+  # Check representativeness
+  if (isFALSE(force)) {
+    check_representativity(region = region, scale = scale)
+  }
+
+  check_ee_initialized()
+
+  from_ee <- l4h_to_eedate(from_date)
+  to_ee   <- l4h_to_eedate(to_date)
+
+  # Sentinel-5P has many granules per day; toBands() would exceed 5000 bands.
+  # Solution: composite to daily means first, then toBands().
+
+  ic <- ee$ImageCollection(.internal_data$co_column$id)$
+    filterDate(from_ee, to_ee)$
+    select("CO_column_number_density")
+
+  # Build daily composite: group by date, take mean of all granules per day
+  date_seq  <- seq(from_date, to_date, by = "day")
+  n_days    <- length(date_seq)
+
+  daily_names <- format(date_seq, "day_%Y%m%d")
+
+  daily_images <- lapply(seq_along(date_seq), function(i) {
+    d <- date_seq[i]
+    day_start <- l4h_to_eedate(d)
+    day_end   <- l4h_to_eedate(d + 1)
+    ic$
+      filterDate(day_start, day_end)$
+      mean()$
+      set("system:time_start", as.numeric(as.POSIXct(d)) * 1000)$
+      rename(daily_names[i])
+  })
+
+  collection <- ee$ImageCollection$fromImages(daily_images)$toBands()
+
+  # Extract
+  extract_co <- l4h_ee_extract(
+    image     = collection,
+    sf_region = region,
+    scale     = scale,
+    fun       = stat,
+    sf        = sf,
+    quiet     = quiet,
+    ...
+  )
+
+  # Pivot to long format
+  geom_col  <- attr(extract_co, "sf_column")
+  band_cols <- grep("^X\\d+_day_\\d{8}$", names(extract_co), value = TRUE)
+  band_cols <- band_cols[order(as.Date(sub(".*_", "", band_cols), format = "%Y%m%d"))]
+
+  # Coerce all band columns to numeric (safety against mixed types from GEE)
+  for (col in band_cols) {
+    extract_co[[col]] <- as.numeric(extract_co[[col]])
+  }
+
+  extract_co <- extract_co |>
+    tidyr::pivot_longer(
+      cols      = dplyr::all_of(band_cols),
+      names_to  = "band",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      date     = as.Date(sub(".*_", "", band), format = "%Y%m%d"),
+      variable = "CO_column_density",
+      value    = dplyr::if_else(value == 0, NA_real_, value) # O NA_integer_ si son enteros
+    ) |>
+    dplyr::select(-band) |>
+    dplyr::relocate(c("date", "variable", "value"), .before = dplyr::all_of(geom_col))
+
+  return(extract_co)
+}
