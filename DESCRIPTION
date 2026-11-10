@@ -1,10 +1,11 @@
 Package: land4health
 Title: Remote Sensing Metrics for Spatial Health Analysis
-Version: 0.3.0
+Version: 0.3.2
 Authors@R: c(
     person("Antony", "Barja", email = "antony.barja@upch.pe", role = c("aut","cph"), comment = c(ORCID = "0000-0001-5921-2858")),
     person("Yomali", "Ferreyra", email = "yomali.ferreyra@upch.pe", role = c("cre"), comment = c(ORCID = "0000-0002-5184-9595")),
-    person("Diego", "Villa", role = c("ctb")))
+    person("Diego", "Villa", role = c("ctb")),
+    person("Gabriel","Carrasco-Escobar",role = c("aut"),comment = c(ORCID = "0000-0002-6945-0419")))
 Description: Calculate and extract remote sensing metrics for spatial analysis in the field of health.
     The package offers R users a quick and straightforward way to obtain areal or zonal statistics of key environmental indicators, covariates, and vector-borne disease data ideal for modeling infectious diseases within the framework of spatial epidemiology.
 Maintainer: Yomali Ferreyra <yomali.ferreyra@upch.pe>
@@ -20,12 +21,14 @@ Depends: R (>= 4.1.0)
 VignetteBuilder: knitr
 BugReports: https://github.com/harmonize-tools/land4health/issues
 Config/testthat/edition: 3
-Config/roxygen2/version: 8.1.0
+Config/roxygen2/version: 8.1.1
 NeedsCompilation: no
-Packaged: 2026-09-28 19:18:16 UTC; mvcs_dgppvu_ambi
+Packaged: 2026-11-10 20:51:07 UTC; mvcs_dgppvu_ambi
 Author: Antony Barja [aut, cph] (ORCID:
     <https://orcid.org/0000-0001-5921-2858>),
   Yomali Ferreyra [cre] (ORCID: <https://orcid.org/0000-0002-5184-9595>),
-  Diego Villa [ctb]
+  Diego Villa [ctb],
+  Gabriel Carrasco-Escobar [aut] (ORCID:
+    <https://orcid.org/0000-0002-6945-0419>)
 Repository: CRAN
-Date/Publication: 2026-10-08 17:40:02 UTC
+Date/Publication: 2026-11-10 21:10:02 UTC
